@@ -12,6 +12,12 @@ app = FastAPI(
     version="3.0.0"
 )
 
+import os
+
+_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'templates')
+with open(os.path.join(_TEMPLATE_DIR, 'index.html'), 'r', encoding='utf-8') as _f:
+    HTML_PAGE = _f.read()
+
 @app.get("/rates", response_model=RatesResponse)
 async def get_rates():
     rates = cache.get_rates()

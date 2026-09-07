@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Калькулятор валют</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1a1a2e;padding:20px}
+.container{max-width:960px;margin:0 auto}
+h1{text-align:center;margin-bottom:24px;font-size:1.6rem;color:#16213e}
+.card{background:#fff;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.card h2{margin-bottom:16px;font-size:1.1rem;border-bottom:2px solid #0f3460;padding-bottom:8px;color:#0f3460}
+.calc-row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+.calc-row .field{flex:1;min-width:140px}
+.calc-row label{display:block;font-size:.8rem;color:#666;margin-bottom:4px}
+.calc-row input,.calc-row select{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:1rem}
+.calc-row input:focus,.calc-row select:focus{outline:none;border-color:#0f3460;box-shadow:0 0 0 2px rgba(15,52,96,.15)}
+.btn{padding:10px 24px;background:#0f3460;color:#fff;border:none;border-radius:8px;font-size:1rem;cursor:pointer;transition:background .2s}
+.btn:hover{background:#16213e}
+.result{text-align:center;padding:16px;background:#e8f4f8;border-radius:8px;margin-top:12px;font-size:1.2rem;font-weight:600;color:#0f3460}
+.bank-table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:12px}
+.bank-table th,.bank-table td{padding:8px 10px;text-align:left;border-bottom:1px solid #eee}
+.bank-table th{background:#f8f9fa;color:#333;font-weight:600}
+.bank-table tr{cursor:pointer;transition:background .15s}
+.bank-table tr:hover{background:#f0f4ff}
+.bank-table tr.active{background:#e3edf7;font-weight:600}
+.updated{text-align:right;font-size:.75rem;color:#999;margin-bottom:8px}
+.detail{display:none;padding:12px;background:#f8f9fa;border-radius:8px;margin-top:8px}
+.detail.show{display:block}
+.detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.detail-grid div{padding:8px;background:#fff;border-radius:6px}
+.detail-grid strong{display:block;font-size:.75rem;color:#888}
+.detail-grid span{font-size:1rem;font-weight:600}
+@media(max-width:600px){.calc-row{flex-direction:column}.calc-row .field{min-width:100%}}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Калькулятор валют (ЦБ РФ + банки)</h1>
+
+<div class="card">
+<h2>Конвертация</h2>
+<div class="calc-row">
+<div class="field"><label>Сумма</label><input type="number" id="amount" value="100" min="0" step="any"></div>
+<div class="field"><label>Из</label><select id="fromCur"></select></div>
+<div class="field"><label>В</label><select id="toCur"></select></div>
+<div class="field"><button class="btn" id="calcBtn">Рассчитать</button></div>
+</div>
+<div class="result" id="result">Введите сумму для расчёта</div>
+</div>
+
+<div class="card">
+<h2>Курсы банков</h2>
+<div class="updated" id="updated">Загрузка...</div>
+<table class="bank-table">
+<thead><tr><th>Банк</th><th>USD Buy</th><th>USD Sell</th><th>EUR Buy</th><th>EUR Sell</th></tr></thead>
+<tbody id="bankBody"></tbody>
+</table>
+<div class="detail" id="bankDetail"><div class="detail-grid" id="detailGrid"></div></div>
+</div>
+</div>
+
+<script>
+var banks={};
+var currencies=['RUB','USD','EUR','GBP','UAH','PLN','CHF','JPY','CNY','TRY','KZT','AZN','GEL','AMD','UZS','KGS','TJS','TMT','BYN','AED','KRW','INR','THB','MYR','PHP','VND'];
+
+function loadBanks(){
+  fetch('/bank-rates').then(function(r){return r.json()}).then(function(data){
+    banks=data;
+    var tbody=document.getElementById('bankBody');
+    tbody.innerHTML='';
+    var keys=Object.keys(data);
+    if(keys.length>0){
+      var first=data[keys[0]];
+      document.getElementById('updated').textContent='Последнее обновление: '+first.updated;
+    }
+    for(var i=0;i<keys.length;i++){
+      var id=keys[i],b=data[id];
+      var tr=document.createElement('tr');
+      tr.setAttribute('data-id',id);
+      var usdBuy=b.rates.USD?b.rates.USD.buy:'&mdash;';
+      var usdSell=b.rates.USD?b.rates.USD.sell:'&mdash;';
+      var eurBuy=b.rates.EUR?b.rates.EUR.buy:'&mdash;';
+      var eurSell=b.rates.EUR?b.rates.EUR.sell:'&mdash;';
+      tr.innerHTML='<td>'+b.name+'</td><td>'+usdBuy+'</td><td>'+usdSell+'</td><td>'+eurBuy+'</td><td>'+eurSell+'</td>';
+      (function(bankId){tr.onclick=function(){showDetail(bankId)}})(id);
+      tbody.appendChild(tr);
+    }
+  });
+}
+
+function showDetail(id){
+  var rows=document.querySelectorAll('.bank-table tr');
+  for(var i=0;i<rows.length;i++) rows[i].classList.remove('active');
+  var tr=document.querySelector('tr[data-id="'+id+'"]');
+  if(tr) tr.classList.add('active');
+  var b=banks[id];
+  var grid=document.getElementById('detailGrid');
+  grid.innerHTML='';
+  grid.innerHTML+='<div><strong>Банк</strong><span>'+b.name+'</span></div>';
+  grid.innerHTML+='<div><strong>Обновлено</strong><span>'+b.updated+'</span></div>';
+  grid.innerHTML+='<div><strong>Ссылка</strong><span><a href="'+b.url+'" target="_blank">Подробнее</a></span></div>';
+  var rates=b.rates;
+  for(var cur in rates){
+    var rate=rates[cur];
+    grid.innerHTML+='<div><strong>'+cur+' &mdash; покупка</strong><span>'+rate.buy+'</span></div>';
+    grid.innerHTML+='<div><strong>'+cur+' &mdash; продажа</strong><span>'+rate.sell+'</span></div>';
+  }
+  document.getElementById('bankDetail').classList.add('show');
+}
+
+function populateCurrencies(){
+  var fc=document.getElementById('fromCur');
+  var tc=document.getElementById('toCur');
+  var list=['USD','EUR','RUB','GBP','UAH','CNY','JPY','KZT','TRY','BYN','CHF','PLN','AED','KRW'];
+  for(var i=0;i<list.length;i++){
+    var c=list[i];
+    if(currencies.indexOf(c)===-1) currencies.push(c);
+    var o1=new Option(c,c),o2=new Option(c,c);
+    fc.appendChild(o1);tc.appendChild(o2);
+  }
+  fc.value='USD';tc.value='RUB';
+}
+
+function calc(){
+  var a=document.getElementById('amount').value;
+  var f=document.getElementById('fromCur').value;
+  var t=document.getElementById('toCur').value;
+  fetch('/convert?from='+f+'&to='+t+'&amount='+a).then(function(r){return r.json()}).then(function(d){
+    document.getElementById('result').textContent=d.amount+' '+d.from_currency+' = '+d.result.toFixed(2)+' '+d.to_currency+' (курс: '+d.rate+')';
+  });
+}
+
+document.getElementById('calcBtn').onclick=calc;
+document.getElementById('amount').addEventListener('input',calc);
+document.getElementById('fromCur').addEventListener('change',calc);
+document.getElementById('toCur').addEventListener('change',calc);
+
+populateCurrencies();
+loadBanks();
+calc();
+</script>
+</body>
+</html>
